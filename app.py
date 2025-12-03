@@ -1,295 +1,331 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import os
+import plotly.graph_objects as go
+import plotly.express as px
 
+# Page configuration
 st.set_page_config(
-    page_title="Food Recommendation for Diabetes",
-    page_icon="🍎",
-    layout="wide"
+    page_title="Food Recommendation System for Diabetes",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# Custom CSS for professional styling
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f4788;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .sub-header {
+        font-size: 1.2rem;
+        color: #555;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .result-safe {
+        background-color: #d4edda;
+        border-left: 5px solid #28a745;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .result-unsafe {
+        background-color: #f8d7da;
+        border-left: 5px solid #dc3545;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .metric-card {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 5px;
+        border: 1px solid #dee2e6;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
+# Load model and preprocessor
 @st.cache_resource
-def load_model():
-    """Load model ML dan preprocessing tools"""
+def load_model_and_scaler():
     try:
         model = joblib.load('best_diabetes_food_model.pkl')
         scaler = joblib.load('scaler.pkl')
-        
-        # Cek apakah ada target encoder
-        if os.path.exists('target_encoder.pkl'):
-            encoder = joblib.load('target_encoder.pkl')
-        else:
-            encoder = None
-        
-        return model, scaler, encoder
-    except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None, None, None
+        feature_names = joblib.load('feature_names.pkl')
+        return model, scaler, feature_names
+    except FileNotFoundError:
+        st.error("Model files not found. Please ensure you have run the training notebook first.")
+        st.stop()
 
-@st.cache_data
-def load_food_database():
-    """Load database makanan dari CSV"""
-    try:
-        df = pd.read_csv('pred_food.csv')
-        return df
-    except Exception as e:
-        st.error(f"Error loading database: {e}")
-        return None
+model, scaler, feature_names = load_model_and_scaler()
 
-# Load model dan data
-model, scaler, encoder = load_model()
-food_df = load_food_database()
-
-# Kolom fitur yang digunakan (harus sama dengan saat training)
-FEATURE_COLS = [
-    'Glycemic Index', 'Calories', 'Carbohydrates', 'Protein', 'Fat',
-    'Sodium Content', 'Potassium Content', 'Magnesium Content',
-    'Calcium Content', 'Fiber Content'
-]
-
-
-def predict_food(food_data):
-    """
-    Prediksi kesesuaian makanan untuk penderita diabetes
+# Prediction function
+def predict_diabetes_safety(input_dict):
+    input_df = pd.DataFrame([input_dict])
+    input_df = input_df[feature_names]
+    input_scaled = scaler.transform(input_df)
+    input_scaled = pd.DataFrame(input_scaled, columns=feature_names)
     
-    Parameters:
-    -----------
-    food_data : pandas Series
-        Data makanan dengan fitur nutrisi
-    
-    Returns:
-    --------
-    dict : hasil prediksi
-    """
-    # Ambil fitur yang diperlukan
-    features = food_data[FEATURE_COLS].values.reshape(1, -1)
-    
-    # Scaling
-    features_scaled = scaler.transform(features)
-    
-    # Prediksi
-    prediction = model.predict(features_scaled)[0]
-    probability = model.predict_proba(features_scaled)[0]
-    
-    # Decode label jika ada encoder
-    if encoder is not None:
-        label = encoder.inverse_transform([prediction])[0]
-    else:
-        label = "Yes" if prediction == 1 else "No"
+    prediction_label = model.predict(input_scaled)[0]
+    prediction_text = "Safe" if prediction_label == 1 else "Not Safe"
+    probabilities = model.predict_proba(input_scaled)[0]
+    confidence = probabilities[prediction_label]
     
     return {
-        'prediction': int(prediction),
-        'label': label,
-        'probability': probability,
-        'confidence': float(max(probability))
+        'prediction': prediction_text,
+        'prediction_label': int(prediction_label),
+        'confidence': float(confidence),
+        'probabilities': {
+            'Not Safe': float(probabilities[0]),
+            'Safe': float(probabilities[1])
+        }
     }
 
-def get_recommendation_message(result, food_name):
-    """Generate pesan rekomendasi berdasarkan hasil prediksi"""
-    is_suitable = (result['label'] == 'Yes' or result['prediction'] == 1)
-    confidence = result['confidence']
-    
-    if is_suitable:
-        if confidence >= 0.8:
-            return f"**AMAN DIKONSUMSI**\n\n'{food_name}' sangat cocok untuk penderita diabetes dengan tingkat keyakinan {confidence:.1%}. Makanan ini memiliki kandungan nutrisi yang sesuai."
-        else:
-            return f"**RELATIF AMAN**\n\n'{food_name}' cukup cocok untuk penderita diabetes (keyakinan {confidence:.1%}), namun tetap perhatikan porsi konsumsi."
-    else:
-        if confidence >= 0.8:
-            return f"**TIDAK DIREKOMENDASIKAN**\n\n'{food_name}' tidak cocok untuk penderita diabetes dengan tingkat keyakinan {confidence:.1%}. Sebaiknya hindari atau batasi konsumsi makanan ini."
-        else:
-            return f"**KURANG DIREKOMENDASIKAN**\n\n'{food_name}' kurang cocok untuk penderita diabetes (keyakinan {confidence:.1%}). Konsumsi dengan hati-hati dan dalam porsi kecil."
-
-
-
 # Header
-st.title("Food Recommendation Assistant")
-st.subheader("Sistem Rekomendasi Makanan untuk Penderita Diabetes")
-st.markdown("---")
+st.markdown('<p class="main-header">Food Recommendation System for Diabetes Patients</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Nutritional Classification Based on Machine Learning</p>', unsafe_allow_html=True)
 
-# Cek apakah model dan data berhasil di-load
-if model is None or food_df is None:
-    st.error("Gagal memuat model atau database. Pastikan semua file tersedia!")
-    st.stop()
-
-# Informasi dataset
-st.sidebar.header("Informasi Database")
-st.sidebar.info(f"Total makanan dalam database: **{len(food_df)}**")
-st.sidebar.markdown("---")
-
-# Pilihan mode
-st.sidebar.header("Mode Aplikasi")
-mode = st.sidebar.radio(
-    "Pilih mode:",
-    ["Cari Makanan", "Input Manual"]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Tentang Aplikasi")
-st.sidebar.info(
-    "Aplikasi ini menggunakan Machine Learning untuk "
-    "memprediksi apakah suatu makanan cocok atau tidak "
-    "untuk penderita diabetes berdasarkan kandungan nutrisinya."
-)
-
-
-if mode == "Cari Makanan":
-    st.header("Cari Makanan dari Database")
+# Sidebar
+with st.sidebar:
+    st.header("About This System")
+    st.write("""
+    This application uses machine learning to classify foods based on their safety for diabetes patients.
     
-    col1, col2 = st.columns([2, 1])
+    **Classification Criteria:**
+    - Sugar content
+    - Carbohydrate levels
+    - Total calories
+    - Other nutritional factors
     
-    with col1:
-        # Dropdown untuk memilih makanan
-        food_list = sorted(food_df['Food Name'].unique().tolist())
+    **Model:** Random Forest Classifier
+    """)
+    
+    st.divider()
+    
+    st.subheader("How to Use")
+    st.write("""
+    1. Select a food from the dropdown menu
+    2. Review the nutritional information
+    3. Click 'Analyze Food Safety' button
+    4. View the prediction results
+    """)
+
+# Main content
+tab1, tab2 = st.tabs(["Food Analysis", "Manual Input"])
+
+with tab1:
+    st.header("Select Food for Analysis")
+    
+    # Load dataset for food selection
+    @st.cache_data
+    def load_food_data():
+        try:
+            df = pd.read_csv('nilai-gizi.csv')
+            # Clean numeric columns
+            for col in feature_names:
+                if col in df.columns and df[col].dtype == 'object':
+                    df[col] = df[col].astype(str).str.replace(r'[^\d.]', '', regex=True)
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            return df
+        except FileNotFoundError:
+            st.error("Dataset not found. Please upload nilai-gizi.csv")
+            return None
+    
+    df = load_food_data()
+    
+    if df is not None:
+        # Food selection
+        food_names = df['name'].dropna().unique().tolist()
         selected_food = st.selectbox(
-            "Pilih nama makanan:",
-            options=food_list,
-            help="Pilih makanan dari dropdown atau ketik untuk mencari"
+            "Choose a food item:",
+            options=food_names,
+            index=0
         )
-    
-    with col2:
-        st.markdown("##")  # Spacing
-        predict_button = st.button("Cek Kesesuaian", type="primary", use_container_width=True)
-    
-    if predict_button and selected_food:
-        # Ambil data makanan yang dipilih
-        food_data = food_df[food_df['Food Name'] == selected_food].iloc[0]
         
-        # Tampilkan info makanan
-        st.markdown("---")
-        st.subheader(f"Informasi Nutrisi: {selected_food}")
+        # Get food data
+        food_data = df[df['name'] == selected_food].iloc[0]
         
-        col1, col2, col3 = st.columns(3)
+        # Display nutritional information
+        st.subheader("Nutritional Information")
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Glycemic Index", f"{food_data['Glycemic Index']:.0f}")
-            st.metric("Kalori", f"{food_data['Calories']:.0f} kcal")
-            st.metric("Karbohidrat", f"{food_data['Carbohydrates']:.1f} g")
-            st.metric("Protein", f"{food_data['Protein']:.1f} g")
+            st.metric("Serving Size", f"{food_data['serving_size']:.0f} g")
+            st.metric("Energy", f"{food_data['energy_kcal']:.1f} kcal")
         
         with col2:
-            st.metric("Lemak", f"{food_data['Fat']:.1f} g")
-            st.metric("Sodium", f"{food_data['Sodium Content']:.0f} mg")
-            st.metric("Potassium", f"{food_data['Potassium Content']:.0f} mg")
-            st.metric("Magnesium", f"{food_data['Magnesium Content']:.0f} mg")
+            st.metric("Protein", f"{food_data['protein_g']:.1f} g")
+            st.metric("Carbohydrates", f"{food_data['carbohydrate_g']:.1f} g")
         
         with col3:
-            st.metric("Kalsium", f"{food_data['Calcium Content']:.0f} mg")
-            st.metric("Serat", f"{food_data['Fiber Content']:.1f} g")
+            st.metric("Fat", f"{food_data['fat_g']:.1f} g")
+            st.metric("Sugar", f"{food_data['sugar_g']:.1f} g")
         
-        # Prediksi
-        with st.spinner("Menganalisis makanan..."):
-            result = predict_food(food_data)
+        with col4:
+            st.metric("Sodium", f"{food_data['sodium_mg']:.1f} mg")
+            st.metric("Fiber", f"{food_data['fiber_g']:.1f} g")
         
-        st.markdown("---")
-        st.subheader("Hasil Analisis")
+        st.divider()
         
-        # Tampilkan rekomendasi
-        message = get_recommendation_message(result, selected_food)
-        
-        if result['prediction'] == 1:
-            st.success(message)
-        else:
-            st.warning(message)
-        
-        # Progress bar confidence
-        st.markdown("### Tingkat Keyakinan Model")
-        st.progress(result['confidence'])
-        st.caption(f"Model yakin {result['confidence']:.1%} dengan prediksi ini")
-        
-        # Detail probabilitas
-        with st.expander("Lihat Detail Probabilitas"):
-            prob_df = pd.DataFrame({
-                'Kategori': ['Tidak Cocok', 'Cocok'],
-                'Probabilitas': [f"{result['probability'][0]:.2%}", f"{result['probability'][1]:.2%}"]
-            })
-            st.table(prob_df)
+        # Predict button
+        if st.button("Analyze Food Safety", type="primary", use_container_width=True):
+            # Prepare input
+            input_data = {feature: food_data[feature] for feature in feature_names}
+            
+            # Make prediction
+            with st.spinner("Analyzing nutritional data..."):
+                result = predict_diabetes_safety(input_data)
+            
+            # Display results
+            st.subheader("Analysis Results")
+            
+            if result['prediction'] == "Safe":
+                st.markdown(f"""
+                <div class="result-safe">
+                    <h3 style="color: #28a745; margin-top: 0;">✓ SAFE FOR DIABETES PATIENTS</h3>
+                    <p style="font-size: 1.1rem; margin-bottom: 0;">
+                        This food is recommended for people with diabetes based on its nutritional profile.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="result-unsafe">
+                    <h3 style="color: #dc3545; margin-top: 0;">✗ NOT SAFE FOR DIABETES PATIENTS</h3>
+                    <p style="font-size: 1.1rem; margin-bottom: 0;">
+                        This food is not recommended for people with diabetes. Consider healthier alternatives.
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Confidence metrics
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("Prediction Confidence", f"{result['confidence']*100:.1f}%")
+            
+            with col2:
+                st.metric("Classification", result['prediction'])
+            
+            # Probability chart
+            st.subheader("Prediction Probability Distribution")
+            
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=['Not Safe', 'Safe'],
+                    y=[result['probabilities']['Not Safe']*100, 
+                       result['probabilities']['Safe']*100],
+                    marker_color=['#dc3545', '#28a745'],
+                    text=[f"{result['probabilities']['Not Safe']*100:.1f}%",
+                          f"{result['probabilities']['Safe']*100:.1f}%"],
+                    textposition='auto',
+                )
+            ])
+            
+            fig.update_layout(
+                title="Model Confidence Level",
+                xaxis_title="Classification",
+                yaxis_title="Probability (%)",
+                yaxis_range=[0, 100],
+                height=400,
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Recommendations
+            st.subheader("Nutritional Recommendations")
+            
+            if result['prediction'] == "Not Safe":
+                st.warning("""
+                **Recommendations for diabetes patients:**
+                - Limit portion size if consuming this food
+                - Pair with high-fiber foods to slow glucose absorption
+                - Monitor blood sugar levels after consumption
+                - Consult with a healthcare provider for personalized advice
+                """)
+            else:
+                st.success("""
+                **This food is suitable because:**
+                - Low sugar content
+                - Moderate carbohydrate levels
+                - Appropriate calorie count
+                - Can be included in a diabetes-friendly diet
+                """)
 
-
-else:
-    st.header("Input Data Nutrisi Manual")
-    st.info("Mode ini untuk makanan yang tidak ada dalam database. Masukkan data nutrisi secara manual.")
+with tab2:
+    st.header("Manual Nutritional Input")
+    st.write("Enter nutritional values manually for custom food analysis.")
     
-    with st.form("manual_input_form"):
-        food_name_manual = st.text_input(
-            "Nama Makanan:",
-            placeholder="Contoh: Nasi Goreng Spesial"
-        )
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        serving_size = st.number_input("Serving Size (g)", min_value=0.0, value=100.0, step=1.0)
+        energy_kcal = st.number_input("Energy (kcal)", min_value=0.0, value=150.0, step=1.0)
+        protein_g = st.number_input("Protein (g)", min_value=0.0, value=5.0, step=0.1)
+        carbohydrate_g = st.number_input("Carbohydrates (g)", min_value=0.0, value=20.0, step=0.1)
+    
+    with col2:
+        fat_g = st.number_input("Fat (g)", min_value=0.0, value=3.0, step=0.1)
+        sugar_g = st.number_input("Sugar (g)", min_value=0.0, value=5.0, step=0.1)
+        sodium_mg = st.number_input("Sodium (mg)", min_value=0.0, value=200.0, step=1.0)
+        fiber_g = st.number_input("Fiber (g)", min_value=0.0, value=2.0, step=0.1)
+    
+    if st.button("Analyze Custom Food", type="primary", use_container_width=True):
+        manual_input = {
+            'serving_size': serving_size,
+            'energy_kcal': energy_kcal,
+            'protein_g': protein_g,
+            'carbohydrate_g': carbohydrate_g,
+            'fat_g': fat_g,
+            'sugar_g': sugar_g,
+            'sodium_mg': sodium_mg,
+            'fiber_g': fiber_g
+        }
+        
+        with st.spinner("Analyzing nutritional data..."):
+            result = predict_diabetes_safety(manual_input)
+        
+        st.subheader("Analysis Results")
+        
+        if result['prediction'] == "Safe":
+            st.markdown(f"""
+            <div class="result-safe">
+                <h3 style="color: #28a745; margin-top: 0;">✓ SAFE FOR DIABETES PATIENTS</h3>
+                <p style="font-size: 1.1rem; margin-bottom: 0;">
+                    Based on the nutritional values provided, this food is suitable for diabetes patients.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="result-unsafe">
+                <h3 style="color: #dc3545; margin-top: 0;">✗ NOT SAFE FOR DIABETES PATIENTS</h3>
+                <p style="font-size: 1.1rem; margin-bottom: 0;">
+                    Based on the nutritional values provided, this food should be avoided by diabetes patients.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            gi = st.number_input("Glycemic Index", 0, 100, 50, help="0-55: Rendah, 56-69: Sedang, 70+: Tinggi")
-            calories = st.number_input("Kalori (kcal)", 0, 1000, 150)
-            carbs = st.number_input("Karbohidrat (g)", 0.0, 200.0, 30.0, step=0.1)
-            protein = st.number_input("Protein (g)", 0.0, 100.0, 10.0, step=0.1)
-            fat = st.number_input("Lemak (g)", 0.0, 100.0, 5.0, step=0.1)
-        
+            st.metric("Confidence", f"{result['confidence']*100:.1f}%")
         with col2:
-            sodium = st.number_input("Sodium (mg)", 0, 2000, 100)
-            potassium = st.number_input("Potassium (mg)", 0, 2000, 250)
-            magnesium = st.number_input("Magnesium (mg)", 0, 500, 50)
-            calcium = st.number_input("Kalsium (mg)", 0, 1000, 100)
-            fiber = st.number_input("Serat (g)", 0.0, 50.0, 8.0, step=0.1)
-        
-        submit_button = st.form_submit_button("Analisis Makanan", type="primary", use_container_width=True)
-    
-    if submit_button:
-        if not food_name_manual:
-            st.warning("Mohon masukkan nama makanan terlebih dahulu!")
-        else:
-            # Buat DataFrame untuk input manual
-            manual_data = pd.Series({
-                'Food Name': food_name_manual,
-                'Glycemic Index': gi,
-                'Calories': calories,
-                'Carbohydrates': carbs,
-                'Protein': protein,
-                'Fat': fat,
-                'Sodium Content': sodium,
-                'Potassium Content': potassium,
-                'Magnesium Content': magnesium,
-                'Calcium Content': calcium,
-                'Fiber Content': fiber
-            })
-            
-            # Prediksi
-            with st.spinner("Menganalisis makanan..."):
-                result = predict_food(manual_data)
-            
-            st.markdown("---")
-            st.subheader("Hasil Analisis")
-            
-            # Tampilkan rekomendasi
-            message = get_recommendation_message(result, food_name_manual)
-            
-            if result['prediction'] == 1:
-                st.success(message)
-            else:
-                st.warning(message)
-            
-            # Progress bar confidence
-            st.markdown("### Tingkat Keyakinan Model")
-            st.progress(result['confidence'])
-            st.caption(f"Model yakin {result['confidence']:.1%} dengan prediksi ini")
-            
-            # Detail probabilitas
-            with st.expander("Lihat Detail Probabilitas"):
-                prob_df = pd.DataFrame({
-                    'Kategori': ['Tidak Cocok', 'Cocok'],
-                    'Probabilitas': [f"{result['probability'][0]:.2%}", f"{result['probability'][1]:.2%}"]
-                })
-                st.table(prob_df)
+            st.metric("Classification", result['prediction'])
 
-
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: gray;'>
-    <p>MATA KULIAH KECERDASAN BUATAN | Dataset: Diabetes Food Dataset</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# Footer
+st.divider()
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 2rem 0;">
+    <p><strong>Disclaimer:</strong> This system is for educational and informational purposes only. 
+    Always consult with healthcare professionals for personalized medical advice.</p>
+    <p>Artificial Intelligence Course Project - Food Recommendation Assistant for Diabetes Patients</p>
+</div>
+""", unsafe_allow_html=True)

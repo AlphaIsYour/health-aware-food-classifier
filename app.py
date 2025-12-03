@@ -2,17 +2,16 @@ import streamlit as st
 import pandas as pd
 import joblib
 import plotly.graph_objects as go
-import plotly.express as px
 
 # Page configuration
 st.set_page_config(
     page_title="Food Recommendation System for Diabetes",
-    page_icon="🏥",
+    page_icon="🥗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for professional styling
+# Custom CSS
 st.markdown("""
     <style>
     .main-header {
@@ -28,30 +27,45 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .result-safe {
+    .result-excellent {
         background-color: #d4edda;
         border-left: 5px solid #28a745;
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
     }
-    .result-unsafe {
+    .result-good {
+        background-color: #d1ecf1;
+        border-left: 5px solid #17a2b8;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .result-moderate {
+        background-color: #fff3cd;
+        border-left: 5px solid #ffc107;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .result-caution {
+        background-color: #ffe5d0;
+        border-left: 5px solid #fd7e14;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .result-avoid {
         background-color: #f8d7da;
         border-left: 5px solid #dc3545;
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
     }
-    .metric-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 5px;
-        border: 1px solid #dee2e6;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# Load model and preprocessor
+# Load model
 @st.cache_resource
 def load_model_and_scaler():
     try:
@@ -60,60 +74,93 @@ def load_model_and_scaler():
         feature_names = joblib.load('feature_names.pkl')
         return model, scaler, feature_names
     except FileNotFoundError:
-        st.error("Model files not found. Please ensure you have run the training notebook first.")
+        st.error("Model files not found. Please run the training notebook first.")
         st.stop()
 
 model, scaler, feature_names = load_model_and_scaler()
+
+# Category mapping
+category_labels = {
+    4: 'Excellent',
+    3: 'Good', 
+    2: 'Moderate',
+    1: 'Caution',
+    0: 'Avoid'
+}
+
+category_colors = {
+    'Excellent': '#28a745',
+    'Good': '#17a2b8',
+    'Moderate': '#ffc107',
+    'Caution': '#fd7e14',
+    'Avoid': '#dc3545'
+}
+
+category_icons = {
+    'Excellent': '✓',
+    'Good': '✓',
+    'Moderate': '⚠',
+    'Caution': '⚠',
+    'Avoid': '✗'
+}
+
+recommendations = {
+    'Excellent': "✓ Sangat aman! Boleh dikonsumsi secara regular.",
+    'Good': "✓ Aman untuk dikonsumsi. Pilihan yang bagus.",
+    'Moderate': "⚠ Boleh sesekali, perhatikan ukuran porsi.",
+    'Caution': "⚠ Batasi konsumsi, pilih alternatif lebih sehat.",
+    'Avoid': "✗ Sebaiknya dihindari atau konsumsi sangat jarang."
+}
 
 # Prediction function
 def predict_diabetes_safety(input_dict):
     input_df = pd.DataFrame([input_dict])
     input_df = input_df[feature_names]
     input_scaled = scaler.transform(input_df)
-    input_scaled = pd.DataFrame(input_scaled, columns=feature_names)
     
     prediction_label = model.predict(input_scaled)[0]
-    prediction_text = "Safe" if prediction_label == 1 else "Not Safe"
     probabilities = model.predict_proba(input_scaled)[0]
-    confidence = probabilities[prediction_label]
+    
+    all_probs = {}
+    for idx in range(len(probabilities)):
+        all_probs[category_labels[idx]] = float(probabilities[idx] * 100)
     
     return {
-        'prediction': prediction_text,
-        'prediction_label': int(prediction_label),
-        'confidence': float(confidence),
-        'probabilities': {
-            'Not Safe': float(probabilities[0]),
-            'Safe': float(probabilities[1])
-        }
+        'category': category_labels[prediction_label],
+        'category_code': int(prediction_label),
+        'confidence': float(probabilities[prediction_label] * 100),
+        'all_probabilities': all_probs,
+        'recommendation': recommendations[category_labels[prediction_label]]
     }
 
 # Header
 st.markdown('<p class="main-header">Food Recommendation System for Diabetes Patients</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Nutritional Classification Based on Machine Learning</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">5-Level Nutritional Classification System</p>', unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
     st.header("About This System")
     st.write("""
-    This application uses machine learning to classify foods based on their safety for diabetes patients.
+    This application uses machine learning to classify foods into 5 safety levels for diabetes patients.
     
-    **Classification Criteria:**
-    - Sugar content
-    - Carbohydrate levels
-    - Total calories
-    - Other nutritional factors
+    **5 Categories:**
+    - 🟢 Excellent: Sangat aman
+    - 🟢 Good: Aman
+    - 🟡 Moderate: Hati-hati
+    - 🟠 Caution: Batasi
+    - 🔴 Avoid: Hindari
     
-    **Model:** Random Forest Classifier
+    **Model:** Random Forest Classifier (5 classes)
     """)
     
     st.divider()
     
     st.subheader("How to Use")
     st.write("""
-    1. Select a food from the dropdown menu
-    2. Review the nutritional information
-    3. Click 'Analyze Food Safety' button
-    4. View the prediction results
+    1. Pilih makanan dari dropdown
+    2. Review informasi nutrisi
+    3. Klik 'Analyze Food Safety'
+    4. Lihat hasil kategori & rekomendasi
     """)
 
 # Main content
@@ -122,36 +169,27 @@ tab1, tab2 = st.tabs(["Food Analysis", "Manual Input"])
 with tab1:
     st.header("Select Food for Analysis")
     
-    # Load dataset for food selection
     @st.cache_data
     def load_food_data():
         try:
             df = pd.read_csv('nilai-gizi.csv')
-            # Clean numeric columns
             for col in feature_names:
                 if col in df.columns and df[col].dtype == 'object':
                     df[col] = df[col].astype(str).str.replace(r'[^\d.]', '', regex=True)
                     df[col] = pd.to_numeric(df[col], errors='coerce')
             return df
         except FileNotFoundError:
-            st.error("Dataset not found. Please upload nilai-gizi.csv")
+            st.error("Dataset not found.")
             return None
     
     df = load_food_data()
     
     if df is not None:
-        # Food selection
         food_names = df['name'].dropna().unique().tolist()
-        selected_food = st.selectbox(
-            "Choose a food item:",
-            options=food_names,
-            index=0
-        )
+        selected_food = st.selectbox("Choose a food item:", options=food_names, index=0)
         
-        # Get food data
         food_data = df[df['name'] == selected_food].iloc[0]
         
-        # Display nutritional information
         st.subheader("Nutritional Information")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -174,64 +212,56 @@ with tab1:
         
         st.divider()
         
-        # Predict button
         if st.button("Analyze Food Safety", type="primary", use_container_width=True):
-            # Prepare input
             input_data = {feature: food_data[feature] for feature in feature_names}
             
-            # Make prediction
-            with st.spinner("Analyzing nutritional data..."):
+            with st.spinner("Analyzing..."):
                 result = predict_diabetes_safety(input_data)
             
-            # Display results
             st.subheader("Analysis Results")
             
-            if result['prediction'] == "Safe":
-                st.markdown(f"""
-                <div class="result-safe">
-                    <h3 style="color: #28a745; margin-top: 0;">✓ SAFE FOR DIABETES PATIENTS</h3>
-                    <p style="font-size: 1.1rem; margin-bottom: 0;">
-                        This food is recommended for people with diabetes based on its nutritional profile.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="result-unsafe">
-                    <h3 style="color: #dc3545; margin-top: 0;">✗ NOT SAFE FOR DIABETES PATIENTS</h3>
-                    <p style="font-size: 1.1rem; margin-bottom: 0;">
-                        This food is not recommended for people with diabetes. Consider healthier alternatives.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+            category = result['category']
+            icon = category_icons[category]
+            color = category_colors[category]
             
-            # Confidence metrics
+            css_class = f"result-{category.lower()}"
+            
+            st.markdown(f"""
+            <div class="{css_class}">
+                <h3 style="color: {color}; margin-top: 0;">{icon} {category.upper()}</h3>
+                <p style="font-size: 1.1rem; margin-bottom: 0;">
+                    {result['recommendation']}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
             col1, col2 = st.columns(2)
             
             with col1:
-                st.metric("Prediction Confidence", f"{result['confidence']*100:.1f}%")
+                st.metric("Prediction Confidence", f"{result['confidence']:.1f}%")
             
             with col2:
-                st.metric("Classification", result['prediction'])
+                st.metric("Category", category)
             
-            # Probability chart
-            st.subheader("Prediction Probability Distribution")
+            st.subheader("All Category Probabilities")
+            
+            categories = ['Excellent', 'Good', 'Moderate', 'Caution', 'Avoid']
+            probs = [result['all_probabilities'][cat] for cat in categories]
+            colors_list = [category_colors[cat] for cat in categories]
             
             fig = go.Figure(data=[
                 go.Bar(
-                    x=['Not Safe', 'Safe'],
-                    y=[result['probabilities']['Not Safe']*100, 
-                       result['probabilities']['Safe']*100],
-                    marker_color=['#dc3545', '#28a745'],
-                    text=[f"{result['probabilities']['Not Safe']*100:.1f}%",
-                          f"{result['probabilities']['Safe']*100:.1f}%"],
+                    x=categories,
+                    y=probs,
+                    marker_color=colors_list,
+                    text=[f"{p:.1f}%" for p in probs],
                     textposition='auto',
                 )
             ])
             
             fig.update_layout(
-                title="Model Confidence Level",
-                xaxis_title="Classification",
+                title="Probability Distribution Across All Categories",
+                xaxis_title="Category",
                 yaxis_title="Probability (%)",
                 yaxis_range=[0, 100],
                 height=400,
@@ -240,25 +270,10 @@ with tab1:
             
             st.plotly_chart(fig, use_container_width=True)
             
-            # Recommendations
-            st.subheader("Nutritional Recommendations")
-            
-            if result['prediction'] == "Not Safe":
-                st.warning("""
-                **Recommendations for diabetes patients:**
-                - Limit portion size if consuming this food
-                - Pair with high-fiber foods to slow glucose absorption
-                - Monitor blood sugar levels after consumption
-                - Consult with a healthcare provider for personalized advice
-                """)
-            else:
-                st.success("""
-                **This food is suitable because:**
-                - Low sugar content
-                - Moderate carbohydrate levels
-                - Appropriate calorie count
-                - Can be included in a diabetes-friendly diet
-                """)
+            st.subheader("Detailed Probabilities")
+            for cat in categories:
+                prob = result['all_probabilities'][cat]
+                st.write(f"**{cat}**: {prob:.2f}%")
 
 with tab2:
     st.header("Manual Nutritional Input")
@@ -290,42 +305,63 @@ with tab2:
             'fiber_g': fiber_g
         }
         
-        with st.spinner("Analyzing nutritional data..."):
+        with st.spinner("Analyzing..."):
             result = predict_diabetes_safety(manual_input)
         
         st.subheader("Analysis Results")
         
-        if result['prediction'] == "Safe":
-            st.markdown(f"""
-            <div class="result-safe">
-                <h3 style="color: #28a745; margin-top: 0;">✓ SAFE FOR DIABETES PATIENTS</h3>
-                <p style="font-size: 1.1rem; margin-bottom: 0;">
-                    Based on the nutritional values provided, this food is suitable for diabetes patients.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="result-unsafe">
-                <h3 style="color: #dc3545; margin-top: 0;">✗ NOT SAFE FOR DIABETES PATIENTS</h3>
-                <p style="font-size: 1.1rem; margin-bottom: 0;">
-                    Based on the nutritional values provided, this food should be avoided by diabetes patients.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        category = result['category']
+        icon = category_icons[category]
+        color = category_colors[category]
+        css_class = f"result-{category.lower()}"
+        
+        st.markdown(f"""
+        <div class="{css_class}">
+            <h3 style="color: {color}; margin-top: 0;">{icon} {category.upper()}</h3>
+            <p style="font-size: 1.1rem; margin-bottom: 0;">
+                {result['recommendation']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Confidence", f"{result['confidence']*100:.1f}%")
+            st.metric("Confidence", f"{result['confidence']:.1f}%")
         with col2:
-            st.metric("Classification", result['prediction'])
+            st.metric("Category", category)
+        
+        st.subheader("All Probabilities")
+        categories = ['Excellent', 'Good', 'Moderate', 'Caution', 'Avoid']
+        probs = [result['all_probabilities'][cat] for cat in categories]
+        colors_list = [category_colors[cat] for cat in categories]
+        
+        fig = go.Figure(data=[
+            go.Bar(
+                x=categories,
+                y=probs,
+                marker_color=colors_list,
+                text=[f"{p:.1f}%" for p in probs],
+                textposition='auto',
+            )
+        ])
+        
+        fig.update_layout(
+            title="Probability Distribution",
+            xaxis_title="Category",
+            yaxis_title="Probability (%)",
+            yaxis_range=[0, 100],
+            height=400,
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
 
 # Footer
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 2rem 0;">
-    <p><strong>Disclaimer:</strong> This system is for educational and informational purposes only. 
-    Always consult with healthcare professionals for personalized medical advice.</p>
-    <p>Artificial Intelligence Course Project - Food Recommendation Assistant for Diabetes Patients</p>
+    <p><strong>Disclaimer:</strong> This system is for educational purposes only. 
+    Always consult healthcare professionals for personalized medical advice.</p>
+    <p>AI Course Project - Food Recommendation for Diabetes Patients (5-Level Classification)</p>
 </div>
 """, unsafe_allow_html=True)

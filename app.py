@@ -17,7 +17,7 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #1f4788;
+        color: #d2fa30;
         text-align: center;
         margin-bottom: 0.5rem;
     }
@@ -33,6 +33,7 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #000;
     }
     .result-good {
         background-color: #d1ecf1;
@@ -40,6 +41,7 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #000;
     }
     .result-moderate {
         background-color: #fff3cd;
@@ -47,6 +49,7 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #000;
     }
     .result-caution {
         background-color: #ffe5d0;
@@ -54,6 +57,7 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #000;
     }
     .result-avoid {
         background-color: #f8d7da;
@@ -61,6 +65,51 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 5px;
         margin: 1rem 0;
+        color: #000;
+    }
+            
+.stButton > button[kind="primary"] {
+    background-color: #130F27 !important;  
+    color: #d2fa30 !important; 
+    border: 1px solid #3C3D37 !important; 
+    font-weight: bold !important;
+}
+    
+.stButton > button[kind="primary"]:hover {
+    background-color: #1a1535 !important;
+    color: #d2fa30 !important;
+    border: 1px solid #3C3D37 !important;
+}
+
+.stButton > button[kind="primary"]:active {
+    background-color: #d2fa30 !important;
+    color: #130F27 !important;
+    border: 1px solid #130F27 !important;
+}
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #393E46 !important;
+        font-weight: bold !important;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #393E46 !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #d2fa30 !important; 
+    }
+
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: #d2fa30 !important; 
+    }
+    
+    .stTabs [data-baseweb="tab-border"] {
+        background-color: #393E46 !important; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -144,11 +193,11 @@ with st.sidebar:
     This application uses machine learning to classify foods into 5 safety levels for diabetes patients.
     
     **5 Categories:**
-    - 🟢 Excellent: Sangat aman
-    - 🟢 Good: Aman
-    - 🟡 Moderate: Hati-hati
-    - 🟠 Caution: Batasi
-    - 🔴 Avoid: Hindari
+    - Excellent: Sangat aman
+    - Good: Aman
+    - Moderate: Hati-hati
+    - Caution: Batasi
+    - Avoid: Hindari
     
     **Model:** Random Forest Classifier (5 classes)
     """)
@@ -360,8 +409,8 @@ with tab2:
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 2rem 0;">
-    <p><strong>Disclaimer:</strong> This system is for educational purposes only. 
-    Always consult healthcare professionals for personalized medical advice.</p>
-    <p>AI Course Project - Food Recommendation for Diabetes Patients (5-Level Classification)</p>
+    <p><strong>FAKULTAS VOKASI UNIVERSITAS BRAWIJAYA</strong></p>
+    <p> Mata Kuliah Kecerdasan Buatan - 2025</p>
+    <p> Food Recommendation for Diabetes Patients (5-Level Classification)</p>
 </div>
 """, unsafe_allow_html=True)
